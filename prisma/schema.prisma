@@ -1,0 +1,263 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SurveyFormStatus {
+  draft
+  published
+  archived
+}
+
+enum PublicationMode {
+  direct_link
+  captive_portal
+}
+
+enum ResponseStatus {
+  completed
+  abandoned
+  rejected
+  expired
+}
+
+enum ResponseSource {
+  captive_portal
+  direct_link
+}
+
+enum ResponseReviewPriority {
+  low
+  medium
+  high
+}
+
+enum AuditActorType {
+  user
+  system
+}
+
+enum PlatformRole {
+  hotel_admin
+  super_admin
+}
+
+model user {
+  id            String       @id @default(cuid())
+  name          String
+  email         String       @unique
+  emailVerified Boolean      @default(false)
+  image         String?
+  platformRole  PlatformRole @default(hotel_admin)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  accounts      account[]
+  sessions      session[]
+  memberships   Membership[]
+  auditLogs     AuditLog[]
+}
+
+model session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  userId    String
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      user     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  user      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+model verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([identifier, value])
+  @@index([identifier])
+}
+
+model Hotel {
+  id            String                @id @default(cuid())
+  name          String
+  slug          String                @unique
+  logoUrl       String?
+  brandColor    String?
+  isActive      Boolean               @default(true)
+  defaultLocale String                @default("tr")
+  timezone      String                @default("Europe/Istanbul")
+  baseCurrency  String                @default("USD")
+  dateFormat    String                @default("MM/DD/YYYY")
+  timeFormat    String                @default("24h")
+  systemLanguage String               @default("en-US")
+  numberFormat  String                @default("1,234,567.89")
+  defaultView   String                @default("list")
+  requireTwoFactor Boolean            @default(true)
+  defaultFormId String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  apiConfigs    ApiConnectionConfig[]
+  auditLogs     AuditLog[]
+  defaultForm   SurveyForm?           @relation("HotelDefaultForm", fields: [defaultFormId], references: [id], onDelete: SetNull)
+  forms         SurveyForm[]
+  memberships   Membership[]
+  responses     SurveyResponse[]
+}
+
+model Membership {
+  id        String   @id @default(cuid())
+  userId    String
+  hotelId   String
+  role      String   @default("owner")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  hotel     Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  user      user     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, hotelId])
+  @@index([hotelId])
+}
+
+model SurveyForm {
+  id              String             @id @default(cuid())
+  hotelId         String
+  name            String
+  description     String?
+  status          SurveyFormStatus   @default(draft)
+  defaultLocale   String             @default("tr")
+  surveySchema    Json
+  thankYouContent Json?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  defaultForHotels Hotel[]           @relation("HotelDefaultForm")
+  hotel           Hotel              @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  publications    SurveyPublication[]
+  responses       SurveyResponse[]
+
+  @@index([hotelId])
+}
+
+model SurveyPublication {
+  id            String           @id @default(cuid())
+  formId        String
+  publicSlug    String           @unique
+  mode          PublicationMode  @default(direct_link)
+  isActive      Boolean          @default(false)
+  startsAt      DateTime?
+  endsAt        DateTime?
+  qrCodeDataUrl String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  form          SurveyForm       @relation(fields: [formId], references: [id], onDelete: Cascade)
+  events        SurveyEvent[]
+  responses     SurveyResponse[]
+
+  @@index([formId])
+}
+
+model SurveyResponse {
+  id                String             @id @default(cuid())
+  formId            String
+  hotelId           String
+  publicationId     String?
+  source            ResponseSource
+  status            ResponseStatus
+  respondentName    String?
+  respondentSurname String?
+  respondentBirthDate DateTime?
+  respondentCountry String?
+  roomNumber        String?
+  stayStart         DateTime?
+  stayEnd           DateTime?
+  externalReference String?
+  submittedAt       DateTime?
+  scoreSummary      Float?
+  reviewPriority    ResponseReviewPriority @default(medium)
+  internalNote      String?
+  answers           Json?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  form              SurveyForm         @relation(fields: [formId], references: [id], onDelete: Cascade)
+  hotel             Hotel              @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  publication       SurveyPublication? @relation(fields: [publicationId], references: [id], onDelete: SetNull)
+  events            SurveyEvent[]
+
+  @@index([hotelId, status])
+  @@index([publicationId])
+}
+
+model SurveyEvent {
+  id            String            @id @default(cuid())
+  publicationId String
+  responseId    String?
+  eventType     String
+  payload       Json?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  publication   SurveyPublication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  response      SurveyResponse?   @relation(fields: [responseId], references: [id], onDelete: SetNull)
+
+  @@index([publicationId, eventType])
+}
+
+model ApiConnectionConfig {
+  id           String   @id @default(cuid())
+  hotelId      String
+  providerType String
+  baseUrl      String
+  authConfig   Json?
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  hotel        Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@index([hotelId])
+}
+
+model AuditLog {
+  id         String         @id @default(cuid())
+  hotelId    String?
+  userId     String?
+  actorType  AuditActorType @default(user)
+  action     String
+  entityType String
+  entityId   String?
+  payload    Json?
+  createdAt  DateTime       @default(now())
+  hotel      Hotel?         @relation(fields: [hotelId], references: [id], onDelete: SetNull)
+  user       user?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([hotelId, action])
+  @@index([userId])
+}
