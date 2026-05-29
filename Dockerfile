@@ -9,14 +9,14 @@ RUN apk add --no-cache libc6-compat openssl
 FROM base AS deps
 
 COPY package.json package-lock.json ./
-RUN npm install
+RUN npm install --ignore-scripts
 
 FROM base AS builder
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-RUN npm run build
+RUN npx prisma generate && npm run build
 
 FROM base AS runner
 
