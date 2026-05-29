@@ -1,4 +1,4 @@
-FROM node:22.14.0-alpine AS base
+FROM node:22.22.2-alpine AS base
 
 WORKDIR /app
 
@@ -9,7 +9,7 @@ RUN apk add --no-cache libc6-compat openssl
 FROM base AS deps
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm install
 
 FROM base AS builder
 
